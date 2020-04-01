@@ -54,7 +54,7 @@ public class WatchingVirtualFileSystem extends AbstractDelegatingVirtualFileSyst
     private static final Logger LOGGER = LoggerFactory.getLogger(WatchingVirtualFileSystem.class);
 
     private final FileWatcherRegistryFactory watcherRegistryFactory;
-    private final ListenerRegistration listenerRegistration;
+    private final DelegatingChangeListenerFactory delegatingChangeListenerFactory;
     private final Predicate<String> watchFilter;
     private final AtomicReference<FileHierarchySet> producedByCurrentBuild = new AtomicReference<>(DefaultFileHierarchySet.of());
     private FileWatcherRegistry watchRegistry;
@@ -96,12 +96,12 @@ public class WatchingVirtualFileSystem extends AbstractDelegatingVirtualFileSyst
     public WatchingVirtualFileSystem(
         FileWatcherRegistryFactory watcherRegistryFactory,
         AbstractVirtualFileSystem delegate,
-        ListenerRegistration listenerRegistration,
+        DelegatingChangeListenerFactory delegatingChangeListenerFactory,
         Predicate<String> watchFilter
     ) {
         super(delegate);
         this.watcherRegistryFactory = watcherRegistryFactory;
-        this.listenerRegistration = listenerRegistration;
+        this.delegatingChangeListenerFactory = delegatingChangeListenerFactory;
         this.watchFilter = watchFilter;
 
         // stop thread
@@ -231,7 +231,7 @@ public class WatchingVirtualFileSystem extends AbstractDelegatingVirtualFileSyst
                     }
                 }
             });
-            listenerRegistration.addListener(changeListener);
+            delegatingChangeListenerFactory.setVfsChangeListener(changeListener);
             long endTime = System.currentTimeMillis() - startTime;
             LOGGER.warn("Spent {} ms registering watches for file system events", endTime);
         } catch (Exception ex) {
@@ -261,7 +261,7 @@ public class WatchingVirtualFileSystem extends AbstractDelegatingVirtualFileSyst
     private void stopWatching() {
         updateWatchRegistry(fileWatcherRegistry -> {
             try {
-                listenerRegistration.removeListener(changeListener);
+                delegatingChangeListenerFactory.setVfsChangeListener(null);
                 fileWatcherRegistry.close();
             } catch (IOException ex) {
                 LOGGER.error("Couldn't fetch file changes, dropping VFS state", ex);

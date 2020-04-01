@@ -26,7 +26,6 @@ import org.gradle.internal.hash.HashCode;
 import org.gradle.internal.snapshot.CaseSensitivity;
 import org.gradle.internal.snapshot.CompleteFileSystemLocationSnapshot;
 import org.gradle.internal.snapshot.FileMetadata;
-import org.gradle.internal.snapshot.FileSystemNode;
 import org.gradle.internal.snapshot.FileSystemSnapshot;
 import org.gradle.internal.snapshot.MissingFileSnapshot;
 import org.gradle.internal.snapshot.RegularFileSnapshot;
@@ -37,8 +36,6 @@ import org.gradle.internal.vfs.SnapshotHierarchy;
 import org.gradle.internal.vfs.SnapshotHierarchy.ChangeListener;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,14 +47,14 @@ import java.util.function.Supplier;
 public class DefaultVirtualFileSystem extends AbstractVirtualFileSystem {
     private final AtomicReference<SnapshotHierarchy> root;
     private final Stat stat;
-    private final VirtualFileSystemChangeListener changeListener;
+    private final ChangeListenerFactory delegatingListener;
     private final DirectorySnapshotter directorySnapshotter;
     private final FileHasher hasher;
     private final StripedProducerGuard<String> producingSnapshots = new StripedProducerGuard<>();
 
-    public DefaultVirtualFileSystem(FileHasher hasher, Interner<String> stringInterner, Stat stat, CaseSensitivity caseSensitivity, VirtualFileSystemChangeListener changeListener, String... defaultExcludes) {
+    public DefaultVirtualFileSystem(FileHasher hasher, Interner<String> stringInterner, Stat stat, CaseSensitivity caseSensitivity, ChangeListenerFactory changeListenerFactory, String... defaultExcludes) {
         this.stat = stat;
-        this.changeListener = changeListener;
+        this.delegatingListener = changeListenerFactory;
         this.directorySnapshotter = new DirectorySnapshotter(hasher, stringInterner, defaultExcludes);
         this.hasher = hasher;
         this.root = new AtomicReference<>(DefaultSnapshotHierarchy.empty(caseSensitivity));
@@ -156,26 +153,12 @@ public class DefaultVirtualFileSystem extends AbstractVirtualFileSystem {
     }
 
     private void updateRoot(UpdateFunction updateFunction) {
-        List<FileSystemNode> removedNodes = new ArrayList<>();
-        List<FileSystemNode> addedNodes = new ArrayList<>();
-        ChangeListener changeListener = new ChangeListener() {
-
-            @Override
-            public void nodeRemoved(FileSystemNode node) {
-                removedNodes.add(node);
-            }
-
-            @Override
-            public void nodeAdded(FileSystemNode node) {
-                addedNodes.add(node);
-            }
-        };
+        DelegatingChangeListenerFactory.LifecycleAwareChangeListener changeListener = delegatingListener.newChangeListener();
         root.updateAndGet(current -> {
-            removedNodes.clear();
-            addedNodes.clear();
+            changeListener.start();
             return updateFunction.update(current, changeListener);
         });
-        this.changeListener.changed(removedNodes, addedNodes);
+        changeListener.finish();
     }
 
     interface UpdateFunction {

@@ -75,7 +75,9 @@ import org.gradle.internal.vfs.RoutingVirtualFileSystem;
 import org.gradle.internal.vfs.VirtualFileSystem;
 import org.gradle.internal.vfs.WatchingAwareVirtualFileSystem;
 import org.gradle.internal.vfs.WindowsFileWatcherRegistry;
+import org.gradle.internal.vfs.impl.ChangeListenerFactory;
 import org.gradle.internal.vfs.impl.DefaultVirtualFileSystem;
+import org.gradle.internal.vfs.impl.DelegatingChangeListenerFactory;
 import org.gradle.internal.vfs.impl.NonWatchingVirtualFileSystem;
 import org.gradle.internal.vfs.impl.WatchingVirtualFileSystem;
 import org.gradle.internal.vfs.watch.FileWatcherRegistryFactory;
@@ -169,30 +171,20 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
             StringInterner stringInterner,
             ListenerManager listenerManager
         ) {
-            VirtualFileSystem.VirtualFileSystemChangeListener broadcaster = listenerManager.getBroadcaster(VirtualFileSystem.VirtualFileSystemChangeListener.class);
+            DelegatingChangeListenerFactory listenerFactory = new DelegatingChangeListenerFactory();
             DefaultVirtualFileSystem delegate = new DefaultVirtualFileSystem(
                 hasher,
                 stringInterner,
                 stat,
                 fileSystem.isCaseSensitive() ? CASE_SENSITIVE : CASE_INSENSITIVE,
-                broadcaster,
+                listenerFactory,
                 DirectoryScanner.getDefaultExcludes()
             );
             WatchingAwareVirtualFileSystem watchingAwareVirtualFileSystem = determineWatcherRegistryFactory(OperatingSystem.current())
                 .<WatchingAwareVirtualFileSystem>map(watcherRegistryFactory -> new WatchingVirtualFileSystem(
                     watcherRegistryFactory,
                     delegate,
-                    new WatchingVirtualFileSystem.ListenerRegistration() {
-                        @Override
-                        public void addListener(VirtualFileSystem.VirtualFileSystemChangeListener changeListener) {
-                            listenerManager.addListener(changeListener);
-                        }
-
-                        @Override
-                        public void removeListener(VirtualFileSystem.VirtualFileSystemChangeListener changeListener) {
-                            listenerManager.removeListener(changeListener);
-                        }
-                    },
+                    listenerFactory,
                     path -> !additiveCacheLocations.isInsideAdditiveCache(path)
                 ))
                 .orElse(new NonWatchingVirtualFileSystem(delegate));
@@ -276,7 +268,7 @@ public class VirtualFileSystemServices extends AbstractPluginServiceRegistry {
                 stringInterner,
                 stat,
                 fileSystem.isCaseSensitive() ? CASE_SENSITIVE : CASE_INSENSITIVE,
-                VirtualFileSystem.VirtualFileSystemChangeListener.NOOP,
+                ChangeListenerFactory.NOOP,
                 DirectoryScanner.getDefaultExcludes()
             );
             RoutingVirtualFileSystem routingVirtualFileSystem = new RoutingVirtualFileSystem(

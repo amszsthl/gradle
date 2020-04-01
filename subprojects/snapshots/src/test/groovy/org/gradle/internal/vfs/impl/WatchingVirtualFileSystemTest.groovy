@@ -28,10 +28,10 @@ class WatchingVirtualFileSystemTest extends Specification {
     def delegate = Mock(AbstractVirtualFileSystem)
     def watcherRegistryFactory = Mock(FileWatcherRegistryFactory)
     def watcherRegistry = Mock(FileWatcherRegistry)
-    def listenerRegistration = Mock(WatchingVirtualFileSystem.ListenerRegistration)
+    def changeListenerFactory = Mock(DelegatingChangeListenerFactory)
     def rootHierarchy = Mock(SnapshotHierarchy)
     def rootReference = new AtomicReference(rootHierarchy)
-    def watchingVirtualFileSystem = new WatchingVirtualFileSystem(watcherRegistryFactory, delegate, listenerRegistration, { -> true })
+    def watchingVirtualFileSystem = new WatchingVirtualFileSystem(watcherRegistryFactory, delegate, changeListenerFactory, { -> true })
     def snapshotHierarchy = DefaultSnapshotHierarchy.empty(CaseSensitivity.CASE_SENSITIVE)
 
     def "invalidates the virtual file system before and after the build when watching is disabled"() {
@@ -55,7 +55,7 @@ class WatchingVirtualFileSystemTest extends Specification {
         then:
         _ * delegate.getRoot() >> new AtomicReference<>(snapshotHierarchy)
         1 * watcherRegistryFactory.startWatcher(_, _) >> watcherRegistry
-        1 * listenerRegistration.addListener(_)
+        1 * changeListenerFactory.setVfsChangeListener(_)
         1 * watcherRegistry.getAndResetStatistics() >> Stub(FileWatcherRegistry.FileWatchingStatistics)
         0 * _
 
@@ -72,7 +72,7 @@ class WatchingVirtualFileSystemTest extends Specification {
         1 * delegate.root >> rootReference
         1 * rootHierarchy.empty()
         1 * watcherRegistry.close()
-        1 * listenerRegistration.removeListener(_)
+        1 * changeListenerFactory.setVfsChangeListener(null)
         0 * _
     }
 
@@ -83,7 +83,7 @@ class WatchingVirtualFileSystemTest extends Specification {
         _ * delegate.getRoot() >> new AtomicReference<>(snapshotHierarchy)
         1 * watcherRegistryFactory.startWatcher(_, _) >> watcherRegistry
         1 * watcherRegistry.getAndResetStatistics() >> Stub(FileWatcherRegistry.FileWatchingStatistics)
-        1 * listenerRegistration.addListener(_)
+        1 * changeListenerFactory.setVfsChangeListener(_)
         0 * _
 
         when:
